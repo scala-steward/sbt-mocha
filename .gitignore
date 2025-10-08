@@ -19,3 +19,12 @@ project/plugins/project/
 .bsp/
 
 .sdkmanrc
+
+# Metals and Bloop
+.metals/
+.bloop/
+.scala-build/
+metals.sbt
+
+# VS Code
+.vscode/
