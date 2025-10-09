@@ -5,6 +5,7 @@ import sbt.Keys._
 import com.typesafe.sbt.web.{SbtWeb, PathMapping}
 import spray.json._
 import com.typesafe.sbt.jse.{SbtJsEngine, SbtJsTask}
+import sbt.mocha.BadCitizen._
 
 object Import {
   object MochaKeys {
@@ -52,12 +53,12 @@ object SbtMocha extends AutoPlugin {
 
   val testResultLogger = TestResultLogger.Default.copy(printNoTests = TestResultLogger.const(_ info "No mocha tests found"))
 
-  override def buildSettings = inTask(mocha)(SbtJsTask.jsTaskSpecificUnscopedBuildSettings ++ Seq(
+  override def buildSettings = Project.inTask(mocha)(SbtJsTask.jsTaskSpecificUnscopedBuildSettings ++ Seq(
     moduleName := "mocha",
     shellFile := getClass.getResource("mocha.js")
   ))
 
-  override def projectSettings = inConfig(Test)(Defaults.defaultTestTasks(mocha)) ++ inConfig(Test)(Defaults.defaultTestTasks(mochaOnly)) ++ inTask(mocha)(SbtJsTask.jsTaskSpecificUnscopedProjectSettings) ++ Seq(
+  override def projectSettings = inConfig(Test)(Defaults.defaultTestTasks(mocha)) ++ inConfig(Test)(Defaults.defaultTestTasks(mochaOnly)) ++ Project.inTask(mocha)(SbtJsTask.jsTaskSpecificUnscopedProjectSettings) ++ Seq(
     MochaKeys.requires := Nil,
     globals := Nil,
     checkLeaks := false,
@@ -84,18 +85,18 @@ object SbtMocha extends AutoPlugin {
 
     // This ensures that mocha tests get executed when test is run
     (Test / executeTests) := {
-      val output = (Test / executeTests).value
+      val executionOutput = (Test / executeTests).value
       val mochaResult = mochaExecuteTests.value
       val (result, suiteResults) = mochaResult
       import TestResult._
 
       // Merge the mocha result with the overall result of the rest of the tests
-      val overallResult = (output.overall, result) match {
+      val overallResult = (executionOutput.overall, result) match {
         case (Error, _) | (_, Error) => Error
         case (Failed, _) | (_, Failed) => Failed
         case _ => Passed
       }
-      Tests.Output(overallResult, output.events ++ suiteResults, output.summaries)
+      output(overallResult, executionOutput.events ++ suiteResults, executionOutput.summaries)
     },
 
     // Defaults.defaultTestTasks(...) above sets logBuffered to true, but we don't want that for these tasks
@@ -105,7 +106,7 @@ object SbtMocha extends AutoPlugin {
     // For running mocha tests in isolation from other types of tests
     mocha := {
       val (result, events) = mochaExecuteTests.value
-      testResultLogger.run(streams.value.log, Tests.Output(result, events, Nil), "")
+      testResultLogger.run(streams.value.log, output(result, events, Nil), "")
     },
   
     // For running only a specified set of tests
@@ -126,7 +127,7 @@ object SbtMocha extends AutoPlugin {
 
       // Run them
       val (result, events) = mochaTestTask.value(tests)
-      testResultLogger.run(streams.value.log, Tests.Output(result, events, Nil), "")
+      testResultLogger.run(streams.value.log, output(result, events, Nil), "")
     }
   ) ++ inConfig(Test)(Defaults.testTaskOptions(mocha)) ++ inConfig(Test)(Defaults.testTaskOptions(mochaOnly))
 

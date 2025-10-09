@@ -3,6 +3,7 @@ package com.typesafe.sbt.mocha
 import spray.json._
 import sbt._
 import sbt.testing._
+import sbt.mocha.BadCitizen._
 
 /**
  * Handles reporting test results
@@ -196,7 +197,7 @@ private [mocha] class MochaTestReporting(mochaWorkDir: File, listeners: Seq[Test
     // sub suites
     val overallResult = suite.suites.map { subSuite =>
       handleSuite(subSuite, filename, nextIndent)
-    }.fold(SuiteResult(results)) { (a, b) =>
+    }.fold(suiteResult(results)) { (a, b) =>
       import TestResult._
       val overallResult = (a.result, b.result) match {
         case (Error, _) | (_, Error) => Error
