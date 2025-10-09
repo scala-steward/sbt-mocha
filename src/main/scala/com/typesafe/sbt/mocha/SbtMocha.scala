@@ -24,7 +24,7 @@ object Import {
     val checkLeaks = SettingKey[Boolean]("mocha-check-leaks", "Check for global variable leaks, defaults to false.", ASetting)
     val bail = SettingKey[Boolean]("mocha-bail", "Bail after the first failure.  Defaults to false.", ASetting)
 
-    val mochaOptions = TaskKey[MochaOptions]("mocha-options", "The mocha options.", CSetting)
+    val mochaOptions = uncached(TaskKey[MochaOptions]("mocha-options", "The mocha options.", CSetting))
 
     case class MochaOptions(
                              requires: Seq[String],
@@ -66,13 +66,13 @@ object SbtMocha extends AutoPlugin {
     checkLeaks := false,
     bail := false,
 
-    mochaOptions := {
+    mochaOptions := uncached {
       MochaOptions(MochaKeys.requires.value, globals.value, checkLeaks.value, bail.value)
     },
 
     // Find the test files to run.  These need to be in the test assets target directory, however we only want to
     // find tests that originally came from the test sources directories (both managed and unmanaged).
-    mochaTests := {
+    mochaTests := uncached {
       implicit val fc: FileConverter = fileConverter.value
       val workDir: File = (TestAssets / assets).value
       val testFilter: FileFilter = (TestAssets / jsFilter).value
@@ -84,13 +84,13 @@ object SbtMocha extends AutoPlugin {
     },
 
     // Actually run the tests
-    mochaExecuteTests := Def.task[(TestResult,Map[String,SuiteResult])] {
+    mochaExecuteTests := uncached (Def.task[(TestResult,Map[String,SuiteResult])] {
       implicit val fc: FileConverter = fileConverter.value
       mochaTestTask.value(mochaTests.value.map( pathMap => toFile(pathMap._1)))
-    }.value,
+    }.value),
 
     // This ensures that mocha tests get executed when test is run
-    (Test / executeTests) := {
+    (Test / executeTests) := uncached {
       val executionOutput = (Test / executeTests).value
       val mochaResult = mochaExecuteTests.value
       val (result, suiteResults) = mochaResult
@@ -110,7 +110,7 @@ object SbtMocha extends AutoPlugin {
     Test / mochaOnly / logBuffered := false,
 
     // For running mocha tests in isolation from other types of tests
-    mocha := {
+    mocha := uncached {
       val (result, events) = mochaExecuteTests.value
       testResultLogger.run(streams.value.log, output(result, events, Nil), "")
     },
