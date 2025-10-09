@@ -1,11 +1,13 @@
 package com.typesafe.sbt.mocha
 
-import sbt._
-import sbt.Keys._
-import com.typesafe.sbt.web.{SbtWeb, PathMapping}
-import spray.json._
+import com.typesafe.sbt.PluginCompat.*
+import sbt.*
+import sbt.Keys.*
+import com.typesafe.sbt.web.{PathMapping, SbtWeb}
+import spray.json.*
 import com.typesafe.sbt.jse.{SbtJsEngine, SbtJsTask}
-import sbt.mocha.BadCitizen._
+import sbt.mocha.BadCitizen.*
+import xsbti.FileConverter
 
 object Import {
   object MochaKeys {
@@ -71,17 +73,21 @@ object SbtMocha extends AutoPlugin {
     // Find the test files to run.  These need to be in the test assets target directory, however we only want to
     // find tests that originally came from the test sources directories (both managed and unmanaged).
     mochaTests := {
+      implicit val fc: FileConverter = fileConverter.value
       val workDir: File = (TestAssets / assets).value
       val testFilter: FileFilter = (TestAssets / jsFilter).value
       val testSources: Seq[File] = (TestAssets / sources).value ++ (TestAssets /managedResources).value
       val testDirectories: Seq[File] = (TestAssets / sourceDirectories).value ++ (TestAssets /managedResourceDirectories).value
       (testSources ** testFilter).pair(Path.relativeTo(testDirectories)).map {
-        case (_, path) => workDir / path -> path
+        case (_, path) => toFileRef(workDir / path) -> path
       }
     },
 
     // Actually run the tests
-    mochaExecuteTests := mochaTestTask.value(mochaTests.value.map(_._1)),
+    mochaExecuteTests := Def.task[(TestResult,Map[String,SuiteResult])] {
+      implicit val fc: FileConverter = fileConverter.value
+      mochaTestTask.value(mochaTests.value.map( pathMap => toFile(pathMap._1)))
+    }.value,
 
     // This ensures that mocha tests get executed when test is run
     (Test / executeTests) := {
@@ -125,8 +131,9 @@ object SbtMocha extends AutoPlugin {
         }
       }
 
+      implicit val fc: FileConverter = fileConverter.value
       // Run them
-      val (result, events) = mochaTestTask.value(tests)
+      val (result, events) = mochaTestTask.value(tests.map(toFile))
       testResultLogger.run(streams.value.log, output(result, events, Nil), "")
     }
   ) ++ inConfig(Test)(Defaults.testTaskOptions(mocha)) ++ inConfig(Test)(Defaults.testTaskOptions(mochaOnly))
