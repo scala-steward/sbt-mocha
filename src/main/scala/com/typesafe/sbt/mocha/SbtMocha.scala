@@ -51,7 +51,7 @@ object SbtMocha extends AutoPlugin {
   import autoImport._
   import MochaKeys._
 
-  val testResultLogger = TestResultLogger.Default.copy(printNoTests = TestResultLogger.const(_ info "No mocha tests found"))
+  val testResultLogger = TestResultLogger.Default.copy(printNoTests = TestResultLogger.const(_.info("No mocha tests found")))
 
   override def buildSettings = Project.inTask(mocha)(SbtJsTask.jsTaskSpecificUnscopedBuildSettings ++ Seq(
     moduleName := "mocha",

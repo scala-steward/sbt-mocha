@@ -277,9 +277,9 @@ private [mocha] class MochaTestReporting(mochaWorkDir: File, listeners: Seq[Test
   case class MochaError(name: String, message: Option[String], stack: Option[String])
 
   object MochaJsonProtocol extends DefaultJsonProtocol {
-    implicit val mochaErrorFormat: JsonFormat[MochaError] = jsonFormat3(MochaError)
-    implicit val mochaTestFormat: JsonFormat[MochaTest] = jsonFormat4(MochaTest)
-    implicit val mochaSuiteFormat: JsonFormat[MochaSuite] = lazyFormat(jsonFormat4(MochaSuite))
+    implicit val mochaErrorFormat: JsonFormat[MochaError] = jsonFormat3(MochaError.apply)
+    implicit val mochaTestFormat: JsonFormat[MochaTest] = jsonFormat4(MochaTest.apply)
+    implicit val mochaSuiteFormat: JsonFormat[MochaSuite] = lazyFormat(jsonFormat4(MochaSuite.apply))
   }
 
 
