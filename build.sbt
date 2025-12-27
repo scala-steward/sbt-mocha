@@ -38,7 +38,7 @@ crossScalaVersions := Seq("2.12.20")
 ThisBuild / (pluginCrossBuild / sbtVersion) := {
   scalaBinaryVersion.value match {
     case "2.12" => "1.11.7"
-    case _      => "2.0.0-RC6"
+    case _      => "2.0.0-RC7"
   }
 }
 
