@@ -37,8 +37,8 @@ scriptedLaunchOpts ++= Seq(
 crossScalaVersions := Seq("2.12.20", "3.7.2")
 ThisBuild / (pluginCrossBuild / sbtVersion) := {
   scalaBinaryVersion.value match {
-    case "2.12" => "1.11.7"
-    case _      => "2.0.0-RC7"
+    case "2.12" => "1.12.0"
+    case _      => "2.0.0-RC8"
   }
 }
 
