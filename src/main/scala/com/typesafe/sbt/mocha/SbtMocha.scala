@@ -1,10 +1,13 @@
 package com.typesafe.sbt.mocha
 
-import sbt._
-import sbt.Keys._
-import com.typesafe.sbt.web.{SbtWeb, PathMapping}
-import spray.json._
+import com.typesafe.sbt.PluginCompat.*
+import sbt.*
+import sbt.Keys.*
+import com.typesafe.sbt.web.{PathMapping, SbtWeb}
+import spray.json.*
 import com.typesafe.sbt.jse.{SbtJsEngine, SbtJsTask}
+import sbt.mocha.BadCitizen.*
+import xsbti.FileConverter
 
 object Import {
   object MochaKeys {
@@ -21,7 +24,7 @@ object Import {
     val checkLeaks = SettingKey[Boolean]("mocha-check-leaks", "Check for global variable leaks, defaults to false.", ASetting)
     val bail = SettingKey[Boolean]("mocha-bail", "Bail after the first failure.  Defaults to false.", ASetting)
 
-    val mochaOptions = TaskKey[MochaOptions]("mocha-options", "The mocha options.", CSetting)
+    val mochaOptions = uncached(TaskKey[MochaOptions]("mocha-options", "The mocha options.", CSetting))
 
     case class MochaOptions(
                              requires: Seq[String],
@@ -37,7 +40,7 @@ object Import {
  */
 object SbtMocha extends AutoPlugin {
 
-  override def requires = SbtJsTask
+  override def requires = SbtJsTask && sbt.plugins.JvmPlugin
 
   override def trigger = AllRequirements
 
@@ -50,63 +53,79 @@ object SbtMocha extends AutoPlugin {
   import autoImport._
   import MochaKeys._
 
-  val testResultLogger = TestResultLogger.Default.copy(printNoTests = TestResultLogger.const(_ info "No mocha tests found"))
+  val testResultLogger = TestResultLogger.Default.copy(printNoTests = TestResultLogger.const(_.info("No mocha tests found")))
 
-  override def buildSettings = inTask(mocha)(SbtJsTask.jsTaskSpecificUnscopedBuildSettings ++ Seq(
+  override def buildSettings = Project.inTask(mocha)(SbtJsTask.jsTaskSpecificUnscopedBuildSettings ++ Seq(
     moduleName := "mocha",
     shellFile := getClass.getResource("mocha.js")
   ))
 
-  override def projectSettings = inConfig(Test)(Defaults.defaultTestTasks(mocha)) ++ inConfig(Test)(Defaults.defaultTestTasks(mochaOnly)) ++ inTask(mocha)(SbtJsTask.jsTaskSpecificUnscopedProjectSettings) ++ Seq(
-    MochaKeys.requires := Nil,
-    globals := Nil,
-    checkLeaks := false,
-    bail := false,
-
-    mochaOptions := {
-      MochaOptions(MochaKeys.requires.value, globals.value, checkLeaks.value, bail.value)
-    },
-
-    // Find the test files to run.  These need to be in the test assets target directory, however we only want to
-    // find tests that originally came from the test sources directories (both managed and unmanaged).
-    mochaTests := {
-      val workDir: File = (TestAssets / assets).value
-      val testFilter: FileFilter = (TestAssets / jsFilter).value
-      val testSources: Seq[File] = (TestAssets / sources).value ++ (TestAssets /managedResources).value
-      val testDirectories: Seq[File] = (TestAssets / sourceDirectories).value ++ (TestAssets /managedResourceDirectories).value
-      (testSources ** testFilter).pair(Path.relativeTo(testDirectories)).map {
-        case (_, path) => workDir / path -> path
-      }
-    },
-
-    // Actually run the tests
-    mochaExecuteTests := mochaTestTask.value(mochaTests.value.map(_._1)),
-
-    // This ensures that mocha tests get executed when test is run
-    (Test / executeTests) := {
-      val output = (Test / executeTests).value
+  override def projectSettings = inConfig(Test)(Seq(
+    mocha / logBuffered := false,
+    mochaOnly / logBuffered := false,
+    mocha / tags := Seq.empty,
+    mochaOnly / tags := Seq.empty,
+    executeTests := uncached(Def.task {
+      val executionOutput = executeTests.value
       val mochaResult = mochaExecuteTests.value
       val (result, suiteResults) = mochaResult
       import TestResult._
 
       // Merge the mocha result with the overall result of the rest of the tests
-      val overallResult = (output.overall, result) match {
+      val overallResult = (executionOutput.overall, result) match {
         case (Error, _) | (_, Error) => Error
         case (Failed, _) | (_, Failed) => Failed
         case _ => Passed
       }
-      Tests.Output(overallResult, output.events ++ suiteResults, output.summaries)
-    },
+      output(overallResult, executionOutput.events ++ suiteResults, executionOutput.summaries)
+    }).value,
+    test := uncached(Def.task {
+      val results = executeTests.value
+      val mochaResult = mochaExecuteTests.value
+      val (result, suiteResults) = mochaResult
+      import TestResult._
 
-    // Defaults.defaultTestTasks(...) above sets logBuffered to true, but we don't want that for these tasks
-    Test / mocha / logBuffered := false,
-    Test / mochaOnly / logBuffered := false,
+      val overallResult = (results.overall, result) match {
+        case (Error, _) | (_, Error) => Error
+        case (Failed, _) | (_, Failed) => Failed
+        case _ => Passed
+      }
+      val combinedResults = output(overallResult, results.events ++ suiteResults, results.summaries)
+      testResultLogger.run(streams.value.log, combinedResults, "test")
+      combinedResults.overall
+    }).value
+  )) ++ Project.inTask(mocha)(SbtJsTask.jsTaskSpecificUnscopedProjectSettings) ++ Seq(
+    MochaKeys.requires := Nil,
+    globals := Nil,
+    checkLeaks := false,
+    bail := false,
+
+    mochaOptions := uncached(Def.task {
+      MochaOptions(MochaKeys.requires.value, globals.value, checkLeaks.value, bail.value)
+    }).value,
+
+    mochaTests := uncached(Def.task {
+      implicit val fc: FileConverter = fileConverter.value
+      val workDir: File = (TestAssets / assets).value
+      val testFilter: FileFilter = (TestAssets / jsFilter).value
+      val testSources: Seq[File] = (TestAssets / sources).value ++ (TestAssets /managedResources).value
+      val testDirectories: Seq[File] = (TestAssets / sourceDirectories).value ++ (TestAssets /managedResourceDirectories).value
+      val pairs = (testSources ** testFilter).pair(Path.relativeTo(testDirectories))
+      pairs.map {
+        case (_, path) => toFileRef(workDir / path) -> path
+      }
+    }).value,
+
+    mochaExecuteTests := uncached (Def.task[(TestResult,Map[String,SuiteResult])] {
+      implicit val fc: FileConverter = fileConverter.value
+      mochaTestTask.value(mochaTests.value.map( pathMap => toFile(pathMap._1)))
+    }).value,
 
     // For running mocha tests in isolation from other types of tests
-    mocha := {
+    mocha := uncached(Def.task {
       val (result, events) = mochaExecuteTests.value
-      testResultLogger.run(streams.value.log, Tests.Output(result, events, Nil), "")
-    },
+      testResultLogger.run(streams.value.log, output(result, events, Nil), "")
+    }).value,
   
     // For running only a specified set of tests
     mochaOnly := {
@@ -124,9 +143,10 @@ object SbtMocha extends AutoPlugin {
         }
       }
 
+      implicit val fc: FileConverter = fileConverter.value
       // Run them
-      val (result, events) = mochaTestTask.value(tests)
-      testResultLogger.run(streams.value.log, Tests.Output(result, events, Nil), "")
+      val (result, events) = mochaTestTask.value(tests.map(toFile))
+      testResultLogger.run(streams.value.log, output(result, events, Nil), "")
     }
   ) ++ inConfig(Test)(Defaults.testTaskOptions(mocha)) ++ inConfig(Test)(Defaults.testTaskOptions(mochaOnly))
 
@@ -143,9 +163,9 @@ object SbtMocha extends AutoPlugin {
       val workDir: File = (TestAssets / assets).value
 
       // One way of declaring dependencies
-      (Plugin / nodeModules).value
-      (Assets / nodeModules).value
-      (TestAssets / nodeModules).value
+      val plugin = (Plugin / nodeModules).value
+      val assert = (Assets / nodeModules).value
+      val testassert = (TestAssets / nodeModules).value
 
       val modules = (
         (Plugin / nodeModuleDirectories).value ++
@@ -162,7 +182,7 @@ object SbtMocha extends AutoPlugin {
         "globals" -> JsArray(options.globals.map(JsString.apply).toVector),
         "checkLeaks" -> JsBoolean(options.checkLeaks),
         "bail" -> JsBoolean(options.bail)
-      )).toString()
+      )).compactPrint
 
       val stateValue = state.value
       val engineTypeValue = (mocha / engineType).value
@@ -174,7 +194,7 @@ object SbtMocha extends AutoPlugin {
       { (tests: Seq[File]) =>
         import scala.concurrent.duration._
         val results = SbtJsTask.executeJs(stateValue, engineTypeValue, commandValue, modules, shellSourceValue,
-          Seq(jsOptions, JsArray(tests.map(t => JsString.apply(t.getCanonicalPath)).toVector).toString()))
+          Seq(jsOptions, JsArray(tests.map(t => JsString.apply(t.getCanonicalPath)).toVector).compactPrint))
 
         results.headOption.map { jsResults =>
           new MochaTestReporting(workDir, listeners).logTestResults(jsResults)
