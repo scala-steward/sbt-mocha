@@ -34,7 +34,7 @@ scriptedLaunchOpts ++= Seq(
   "-XX:MaxMetaspaceSize=512M",
 )
 
-crossScalaVersions := Seq("2.12.20", "3.7.2")
+crossScalaVersions := Seq("2.12.21", "3.7.4")
 ThisBuild / (pluginCrossBuild / sbtVersion) := {
   scalaBinaryVersion.value match {
     case "2.12" => "1.12.0"
