@@ -3,7 +3,7 @@ enablePlugins(SbtWeb)
 Keys.libraryDependencies += "org.specs2" %% "specs2-core" % "4.20.4" % "test"
 
 MochaKeys.requires += "Setup"
-scalaVersion := "2.13.12"
+scalaVersion := "2.13.18"
 
 Global / Keys.extraAppenders := { scope =>
   // Configure extra loggers just for the mocha and test tasks
