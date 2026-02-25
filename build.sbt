@@ -11,7 +11,7 @@ developers += Developer(
   url("https://github.com/playframework")
 )
 
-addSbtJsEngine("1.4.0-M1")
+addSbtJsEngine("1.4.0-M2")
 
 libraryDependencies ++= Seq(
   "org.webjars.npm" % "node-require-fallback" % "1.0.0",
@@ -34,11 +34,11 @@ scriptedLaunchOpts ++= Seq(
   "-XX:MaxMetaspaceSize=512M",
 )
 
-crossScalaVersions := Seq("2.12.21", "3.7.4")
+crossScalaVersions := Seq("2.12.21", "3.8.2")
 ThisBuild / (pluginCrossBuild / sbtVersion) := {
   scalaBinaryVersion.value match {
-    case "2.12" => "1.12.0"
-    case _      => "2.0.0-RC8"
+    case "2.12" => "1.12.4"
+    case _      => "2.0.0-RC9"
   }
 }
 
